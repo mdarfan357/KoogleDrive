@@ -1,123 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FaceAlbum — Review Matches</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space/';
-    window.VITE_API_KEY = '';
+    window.SUPABASE_URL      = 'https://your-project.supabase.co';
+    window.SUPABASE_ANON_KEY = 'your-anon-key';
+    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
-
 <nav class="nav">
-  <div class="nav-brand">
-    <div class="nav-brand-dot"></div>
-    <span class="nav-brand-name">FaceAlbum</span>
-  </div>
+  <div class="nav-brand"><div class="nav-brand-dot"></div><span class="nav-brand-name">FaceAlbum</span></div>
   <div class="nav-links">
     <button class="nav-link" onclick="location.href='../index.html'">Find Me</button>
     <button class="nav-link" onclick="location.href='events.html'">Events</button>
     <button class="nav-link" onclick="location.href='persons.html'">People</button>
-    <button class="nav-link active" onclick="location.href='merge.html'">Review</button>
+    <button class="nav-link active">Review</button>
   </div>
 </nav>
-
 <main class="main">
-  <div class="page-header">
-    <h1 class="page-title">Review Matches</h1>
-    <p class="page-subtitle" id="subtitle">Loading...</p>
-  </div>
+  <div class="page-header"><h1 class="page-title">Review Matches</h1><p class="page-subtitle" id="subtitle">Loading...</p></div>
   <div id="app"></div>
 </main>
-
+<script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
-const app      = document.getElementById('app');
-const subtitle = document.getElementById('subtitle');
 let candidates = [];
-
 async function init() {
-  showSpinner(app);
+  const user = await requireAuth(); if (!user) return;
+  renderUserBadge(user);
+  showSpinner(document.getElementById('app'));
   try {
     const data = await api.getMergeCandidates();
-    candidates = data.candidates || [];
-    subtitle.textContent = `${candidates.length} pairs need your review — are these the same person?`;
+    candidates = data.candidates||[];
+    document.getElementById('subtitle').textContent = `${candidates.length} pairs need your review`;
     render();
-  } catch(e) {
-    app.innerHTML = `<p style="color:var(--red)">Failed to load candidates: ${e.message}</p>`;
-  }
+  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed: ${e.message}</p>`; }
 }
 
 function render() {
-  if (!candidates.length) {
-    showEmpty(app, '✅', 'All caught up!', 'No pending merge candidates. Run the pipeline to check for new ones.');
-    return;
-  }
-
-  app.innerHTML = candidates.map(c => `
+  if (!candidates.length) { showEmpty(document.getElementById('app'), '✅', 'All caught up!', 'No pending merge candidates.'); return; }
+  document.getElementById('app').innerHTML = candidates.map(c => `
     <div class="candidate-card" id="card-${c.id}">
-      <div>
-        <span class="badge badge-accent">${Math.round(c.similarity * 100)}% match</span>
-      </div>
+      <span class="badge badge-accent">${Math.round(c.similarity*100)}% match</span>
       <div class="candidate-persons">
-        ${personSampleHtml(c.person_a)}
+        <div style="flex:1"><div class="person-sample-name">${c.person_a.name||'<em>Unnamed</em>'}</div>
+          <div class="person-sample-thumbs">${(c.person_a.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div></div>
         <div class="candidate-vs">vs</div>
-        ${personSampleHtml(c.person_b)}
+        <div style="flex:1"><div class="person-sample-name">${c.person_b.name||'<em>Unnamed</em>'}</div>
+          <div class="person-sample-thumbs">${(c.person_b.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div></div>
       </div>
       <div class="candidate-actions">
-        <button class="btn btn-success" id="merge-${c.id}" onclick="resolve(${c.id},'merge')">
-          ✓ Same person — merge
-        </button>
-        <button class="btn btn-danger" id="reject-${c.id}" onclick="resolve(${c.id},'reject')">
-          ✕ Different people
-        </button>
+        <button class="btn btn-success" id="merge-${c.id}" onclick="resolve(${c.id},'merge')">✓ Same person — merge</button>
+        <button class="btn btn-danger"  id="reject-${c.id}" onclick="resolve(${c.id},'reject')">✕ Different people</button>
       </div>
     </div>`).join('');
 }
 
-function personSampleHtml(person) {
-  const thumbsHtml = (person.sample_thumbnails || []).slice(0, 4).map(url =>
-    `<img src="${url}" class="person-sample-img" onerror="this.style.display='none'" />`
-  ).join('');
-
-  return `
-    <div style="flex:1">
-      <div class="person-sample-name">
-        ${person.name ? person.name : '<em>Unnamed</em>'}
-      </div>
-      <div class="person-sample-thumbs">${thumbsHtml}</div>
-    </div>`;
-}
-
 async function resolve(id, action) {
-  const mergeBtn  = document.getElementById(`merge-${id}`);
-  const rejectBtn = document.getElementById(`reject-${id}`);
-  if (mergeBtn)  mergeBtn.disabled  = true;
-  if (rejectBtn) rejectBtn.disabled = true;
-  if (mergeBtn)  mergeBtn.textContent  = '...';
-  if (rejectBtn) rejectBtn.textContent = '...';
-
+  ['merge','reject'].forEach(t => { const b = document.getElementById(`${t}-${id}`); if(b){b.disabled=true;b.textContent='...';} });
   try {
     await api.resolveCandidate(id, action);
     candidates = candidates.filter(c => c.id !== id);
     const card = document.getElementById(`card-${id}`);
-    if (card) {
-      card.style.opacity = '0';
-      card.style.transition = 'opacity 0.3s';
-      setTimeout(() => { card.remove(); if (!candidates.length) render(); }, 300);
-    }
-    subtitle.textContent = `${candidates.length} pairs need your review`;
-    showToast(action === 'merge' ? 'Merged successfully' : 'Marked as different people');
-  } catch(e) {
-    showToast(e.message, 'error');
-    if (mergeBtn)  { mergeBtn.disabled  = false; mergeBtn.textContent  = '✓ Same person — merge'; }
-    if (rejectBtn) { rejectBtn.disabled = false; rejectBtn.textContent = '✕ Different people'; }
-  }
+    if (card) { card.style.opacity='0'; card.style.transition='opacity 0.3s'; setTimeout(()=>{card.remove();if(!candidates.length)render();},300); }
+    document.getElementById('subtitle').textContent = `${candidates.length} pairs need your review`;
+    showToast(action==='merge'?'Merged successfully':'Marked as different people');
+  } catch(e) { showToast(e.message,'error'); }
 }
-
 init();
 </script>
 </body>

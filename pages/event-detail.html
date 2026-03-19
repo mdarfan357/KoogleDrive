@@ -1,22 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FaceAlbum — Event</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space/';
-    window.VITE_API_KEY = '';
+    window.SUPABASE_URL      = 'https://your-project.supabase.co';
+    window.SUPABASE_ANON_KEY = 'your-anon-key';
+    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
-
 <nav class="nav">
-  <div class="nav-brand">
-    <div class="nav-brand-dot"></div>
-    <span class="nav-brand-name">FaceAlbum</span>
-  </div>
+  <div class="nav-brand"><div class="nav-brand-dot"></div><span class="nav-brand-name">FaceAlbum</span></div>
   <div class="nav-links">
     <button class="nav-link" onclick="location.href='../index.html'">Find Me</button>
     <button class="nav-link active" onclick="location.href='events.html'">Events</button>
@@ -24,7 +20,6 @@
     <button class="nav-link" onclick="location.href='merge.html'">Review</button>
   </div>
 </nav>
-
 <main class="main">
   <button class="back-btn" onclick="location.href='events.html'">← Events</button>
   <div id="header"></div>
@@ -33,60 +28,40 @@
     <button class="btn btn-secondary" id="btn-more">Load more</button>
   </div>
 </main>
-
+<script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
 const eventId = getParam('id');
-const app     = document.getElementById('app');
-const header  = document.getElementById('header');
-let page = 1;
-let allPhotos = [];
-
 if (!eventId) location.href = 'events.html';
+let page = 1, allPhotos = [];
 
 async function init() {
-  // Load event meta
+  const user = await requireAuth(); if (!user) return;
+  renderUserBadge(user);
   try {
     const ev = await api.getEvent(eventId);
     document.title = `FaceAlbum — ${ev.name}`;
-    header.innerHTML = `
-      <div class="page-header">
-        <h1 class="page-title">${ev.name}</h1>
-        <p class="page-subtitle">
-          ${ev.photo_count || 0} photos · ${ev.person_count || 0} people
-          ${ev.date ? ` · ${new Date(ev.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}
-        </p>
-      </div>`;
-  } catch(e) {
-    header.innerHTML = `<div class="page-header"><h1 class="page-title">${eventId}</h1></div>`;
-  }
-
-  showSpinner(app);
+    document.getElementById('header').innerHTML = `<div class="page-header"><h1 class="page-title">${ev.name}</h1><p class="page-subtitle">${ev.photo_count||0} photos · ${ev.person_count||0} people${ev.date?` · ${new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`:''}
+    </p></div>`;
+  } catch(e) { document.getElementById('header').innerHTML = `<div class="page-header"><h1 class="page-title">${eventId}</h1></div>`; }
+  showSpinner(document.getElementById('app'));
   await loadPage(1);
 }
 
 async function loadPage(p) {
   try {
-    const data  = await api.getEventPhotos(eventId, p);
+    const data = await api.getEventPhotos(eventId, p);
     const photos = data.photos || [];
     allPhotos = p === 1 ? photos : [...allPhotos, ...photos];
-    renderPhotos();
-    const loadMore = document.getElementById('load-more');
-    loadMore.style.display = photos.length === 50 ? 'block' : 'none';
-  } catch(e) {
-    app.innerHTML = `<p style="color:var(--red)">Failed to load photos: ${e.message}</p>`;
-  }
-}
-
-function renderPhotos() {
-  if (!allPhotos.length) { showEmpty(app, '🖼️', 'No photos yet'); return; }
-  app.innerHTML = `<div class="photo-grid">${allPhotos.map(p => `
-    <div class="photo-tile" onclick="openLightbox('${imageUrl(p.drive_file_id)}','${p.person_name||''}','${p.person_id||''}')">
-      <img src="${thumbUrl(p.drive_file_id)}" alt="${p.file_name||''}"
-           onerror="this.parentElement.innerHTML='<div class=photo-skeleton></div>'" />
-      ${p.person_name ? `<div class="photo-label">${p.person_name}</div>` : ''}
-    </div>`).join('')}
-  </div>`;
+    const app = document.getElementById('app');
+    if (!allPhotos.length) { showEmpty(app, '🖼️', 'No photos yet'); return; }
+    app.innerHTML = `<div class="photo-grid">${allPhotos.map(p => `
+      <div class="photo-tile" onclick="openLightbox('${imageUrl(p.drive_file_id)}','${p.person_name||''}','${p.person_id||''}')">
+        <img src="${thumbUrl(p.drive_file_id)}" alt="" onerror="this.parentElement.innerHTML='<div class=photo-skeleton></div>'" />
+        ${p.person_name?`<div class="photo-label">${p.person_name}</div>`:''}
+      </div>`).join('')}</div>`;
+    document.getElementById('load-more').style.display = photos.length === 50 ? 'block' : 'none';
+  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed: ${e.message}</p>`; }
 }
 
 document.getElementById('btn-more').onclick = async () => {
@@ -95,7 +70,6 @@ document.getElementById('btn-more').onclick = async () => {
   await loadPage(page);
   document.getElementById('btn-more').textContent = 'Load more';
 };
-
 init();
 </script>
 </body>

@@ -6,62 +6,48 @@
   <title>FaceAlbum — Events</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space/';
-    window.VITE_API_KEY = '';
+    window.SUPABASE_URL      = 'https://your-project.supabase.co';
+    window.SUPABASE_ANON_KEY = 'your-anon-key';
+    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
-
 <nav class="nav">
-  <div class="nav-brand">
-    <div class="nav-brand-dot"></div>
-    <span class="nav-brand-name">FaceAlbum</span>
-  </div>
+  <div class="nav-brand"><div class="nav-brand-dot"></div><span class="nav-brand-name">FaceAlbum</span></div>
   <div class="nav-links">
     <button class="nav-link" onclick="location.href='../index.html'">Find Me</button>
-    <button class="nav-link active" onclick="location.href='events.html'">Events</button>
+    <button class="nav-link active">Events</button>
     <button class="nav-link" onclick="location.href='persons.html'">People</button>
     <button class="nav-link" onclick="location.href='merge.html'">Review</button>
   </div>
 </nav>
-
 <main class="main">
-  <div class="page-header">
-    <h1 class="page-title">Events</h1>
-    <p class="page-subtitle">Browse photos by occasion</p>
-  </div>
+  <div class="page-header"><h1 class="page-title">Events</h1><p class="page-subtitle">Browse photos by occasion</p></div>
   <div id="app"></div>
 </main>
-
+<script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
-const app = document.getElementById('app');
-
 async function init() {
-  showSpinner(app);
+  const user = await requireAuth(); if (!user) return;
+  renderUserBadge(user);
+  showSpinner(document.getElementById('app'));
   try {
     const data = await api.getEvents();
     const events = data.events || [];
-    if (!events.length) { showEmpty(app, '📷', 'No events yet', 'Run the pipeline to process your first event.'); return; }
-
-    app.innerHTML = `<div class="events-list">${events.map(ev => `
+    if (!events.length) { showEmpty(document.getElementById('app'), '📷', 'No events yet', 'Run the pipeline to process your first event.'); return; }
+    document.getElementById('app').innerHTML = `<div class="events-list">${events.map(ev => `
       <div class="event-row" onclick="location.href='event-detail.html?id=${ev.id}'">
         <div class="event-icon">📷</div>
         <div class="event-info">
           <div class="event-name">${ev.name}</div>
-          <div class="event-meta">
-            ${ev.photo_count} photos · ${ev.person_count} people
-            ${ev.date ? ` · ${new Date(ev.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}` : ''}
+          <div class="event-meta">${ev.photo_count} photos · ${ev.person_count} people${ev.date?` · ${new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'short'})}`:''}
           </div>
         </div>
         <div class="event-arrow">›</div>
-      </div>`).join('')}
-    </div>`;
-  } catch (e) {
-    app.innerHTML = `<p style="color:var(--red)">Failed to load events: ${e.message}</p>`;
-  }
+      </div>`).join('')}</div>`;
+  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed to load events: ${e.message}</p>`; }
 }
-
 init();
 </script>
 </body>

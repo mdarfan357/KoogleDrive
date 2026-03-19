@@ -1,22 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FaceAlbum — Person</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space/';
-    window.VITE_API_KEY = '';
+    window.SUPABASE_URL      = 'https://your-project.supabase.co';
+    window.SUPABASE_ANON_KEY = 'your-anon-key';
+    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
-
 <nav class="nav">
-  <div class="nav-brand">
-    <div class="nav-brand-dot"></div>
-    <span class="nav-brand-name">FaceAlbum</span>
-  </div>
+  <div class="nav-brand"><div class="nav-brand-dot"></div><span class="nav-brand-name">FaceAlbum</span></div>
   <div class="nav-links">
     <button class="nav-link" onclick="location.href='../index.html'">Find Me</button>
     <button class="nav-link" onclick="location.href='events.html'">Events</button>
@@ -24,149 +20,94 @@
     <button class="nav-link" onclick="location.href='merge.html'">Review</button>
   </div>
 </nav>
-
 <main class="main">
   <button class="back-btn" onclick="location.href='persons.html'">← People</button>
   <div id="header"></div>
   <div id="tabs"></div>
   <div id="app"></div>
 </main>
-
-<!-- Rename modal -->
 <div class="modal-overlay" id="modal" style="display:none">
   <div class="modal">
     <h3>Name this person</h3>
     <input class="input" id="modal-input" placeholder="Enter name..." />
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('modal').style.display='none'">Cancel</button>
       <button class="btn btn-primary" id="modal-save" onclick="saveName()">Save</button>
     </div>
   </div>
 </div>
-
+<script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
 const personId = getParam('id');
 if (!personId) location.href = 'persons.html';
-
-const headerEl = document.getElementById('header');
-const tabsEl   = document.getElementById('tabs');
-const app      = document.getElementById('app');
-
-let personData  = null;
-let eventsData  = [];
-let activeEvent = 'all';
+let personData = null, eventsData = [], activeEvent = 'all';
 
 async function init() {
-  showSpinner(app);
+  const user = await requireAuth(); if (!user) return;
+  renderUserBadge(user);
+  showSpinner(document.getElementById('app'));
   try {
     const data = await api.getPerson(personId);
-    personData = data.person;
-    eventsData = data.events || [];
-    document.title = `FaceAlbum — ${personData.name || 'Unnamed'}`;
-    renderHeader();
-    renderTabs();
-    renderPhotos();
-
-    // Load suggestions for unnamed
+    personData = data.person; eventsData = data.events || [];
+    document.title = `FaceAlbum — ${personData.name||'Unnamed'}`;
+    renderHeader(); renderTabs(); renderPhotos();
     if (!personData.name) {
-      try {
-        const sugg = await api.getSuggestions(personId);
-        renderSuggestions(sugg.suggestions || []);
-      } catch(e) {}
+      try { const s = await api.getSuggestions(personId); renderSuggestions(s.suggestions||[]); } catch(e) {}
     }
-  } catch(e) {
-    app.innerHTML = `<p style="color:var(--red)">Failed to load person: ${e.message}</p>`;
-  }
+  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed: ${e.message}</p>`; }
 }
 
-function allPhotos() {
-  return eventsData.flatMap(e => e.photos.map(p => ({ ...p, event_name: e.event_name })));
-}
+function allPhotos() { return eventsData.flatMap(e => e.photos.map(p => ({...p, event_name: e.event_name}))); }
 
 function renderHeader() {
   const p = personData;
-  headerEl.innerHTML = `
-    <div class="page-header">
-      <div class="person-header">
-        <div class="person-header-avatar">
-          ${p.cover_image_id
-            ? `<img src="${thumbUrl(p.cover_image_id)}" alt="${p.name||''}" />`
-            : `<span>${initials(p.name)}</span>`}
-        </div>
-        <div class="person-header-info">
-          <h1>
-            ${p.name ? p.name : '<em style="color:var(--text3);font-style:italic;font-weight:400">Unnamed Person</em>'}
-            <button class="rename-btn" onclick="openModal()" title="Rename">✏️</button>
-          </h1>
-          <p class="page-subtitle">${allPhotos().length} photos across ${eventsData.length} events</p>
-        </div>
+  document.getElementById('header').innerHTML = `<div class="page-header">
+    <div class="person-header">
+      <div class="person-header-avatar">${p.cover_image_id?`<img src="${thumbUrl(p.cover_image_id)}" alt="" />`:`<span>${initials(p.name)}</span>`}</div>
+      <div class="person-header-info">
+        <h1>${p.name||'<em style="color:var(--text3);font-style:italic;font-weight:400">Unnamed Person</em>'}
+          <button class="rename-btn" onclick="openModal()">✏️</button></h1>
+        <p class="page-subtitle">${allPhotos().length} photos across ${eventsData.length} events</p>
       </div>
-      <div id="suggestions"></div>
-    </div>`;
-}
-
-function renderSuggestions(suggestions) {
-  if (!suggestions.length) return;
-  const el = document.getElementById('suggestions');
-  if (!el) return;
-  el.innerHTML = `
-    <div class="suggestions-bar">
-      <span class="suggestions-label">Suggested:</span>
-      ${suggestions.map(s => `
-        <button class="suggestion-chip" onclick="location.href='person.html?id=${s.person_id}'">
-          ${s.person_name} · ${s.similarity_pct}
-        </button>`).join('')}
-    </div>`;
-}
-
-function renderTabs() {
-  if (eventsData.length <= 1) { tabsEl.innerHTML = ''; return; }
-  tabsEl.innerHTML = `
-    <div class="tabs">
-      <button class="tab ${activeEvent === 'all' ? 'active' : ''}"
-        onclick="setTab('all')">All (${allPhotos().length})</button>
-      ${eventsData.map(e => `
-        <button class="tab ${activeEvent === e.event_id ? 'active' : ''}"
-          onclick="setTab('${e.event_id}')">
-          ${e.event_name} (${e.photos.length})
-        </button>`).join('')}
-    </div>`;
-}
-
-function setTab(id) {
-  activeEvent = id;
-  renderTabs();
-  renderPhotos();
-}
-
-function renderPhotos() {
-  const photos = activeEvent === 'all'
-    ? allPhotos()
-    : (eventsData.find(e => e.event_id === activeEvent)?.photos || []);
-
-  if (!photos.length) { showEmpty(app, '🖼️', 'No photos'); return; }
-
-  app.innerHTML = `<div class="photo-grid">${photos.map(p => `
-    <div class="photo-tile"
-      onclick="openLightbox('${imageUrl(p.drive_file_id)}','${p.event_name||''}','')">
-      <img src="${thumbUrl(p.drive_file_id)}" alt=""
-           onerror="this.parentElement.innerHTML='<div class=photo-skeleton></div>'" />
-      ${p.event_name ? `<div class="photo-label">${p.event_name}</div>` : ''}
-    </div>`).join('')}
+    </div>
+    <div id="suggestions"></div>
   </div>`;
 }
 
-// ── RENAME MODAL ──
-function openModal() {
-  document.getElementById('modal-input').value = personData.name || '';
-  document.getElementById('modal').style.display = 'flex';
-  document.getElementById('modal-input').focus();
-  document.getElementById('modal-input').onkeydown = (e) => { if (e.key === 'Enter') saveName(); };
+function renderSuggestions(suggestions) {
+  const el = document.getElementById('suggestions');
+  if (!el || !suggestions.length) return;
+  el.innerHTML = `<div class="suggestions-bar"><span class="suggestions-label">Suggested:</span>
+    ${suggestions.map(s=>`<button class="suggestion-chip" onclick="location.href='person.html?id=${s.person_id}'">${s.person_name} · ${s.similarity_pct}</button>`).join('')}
+  </div>`;
 }
 
-function closeModal() {
-  document.getElementById('modal').style.display = 'none';
+function renderTabs() {
+  if (eventsData.length <= 1) { document.getElementById('tabs').innerHTML = ''; return; }
+  document.getElementById('tabs').innerHTML = `<div class="tabs">
+    <button class="tab ${activeEvent==='all'?'active':''}" onclick="setTab('all')">All (${allPhotos().length})</button>
+    ${eventsData.map(e=>`<button class="tab ${activeEvent===e.event_id?'active':''}" onclick="setTab('${e.event_id}')">${e.event_name} (${e.photos.length})</button>`).join('')}
+  </div>`;
+}
+
+function setTab(id) { activeEvent = id; renderTabs(); renderPhotos(); }
+
+function renderPhotos() {
+  const photos = activeEvent === 'all' ? allPhotos() : (eventsData.find(e=>e.event_id===activeEvent)?.photos||[]);
+  if (!photos.length) { showEmpty(document.getElementById('app'), '🖼️', 'No photos'); return; }
+  document.getElementById('app').innerHTML = `<div class="photo-grid">${photos.map(p=>`
+    <div class="photo-tile" onclick="openLightbox('${imageUrl(p.drive_file_id)}','${p.event_name||''}','')">
+      <img src="${thumbUrl(p.drive_file_id)}" alt="" onerror="this.parentElement.innerHTML='<div class=photo-skeleton></div>'" />
+      ${p.event_name?`<div class="photo-label">${p.event_name}</div>`:''}
+    </div>`).join('')}</div>`;
+}
+
+function openModal() {
+  document.getElementById('modal-input').value = personData.name||'';
+  document.getElementById('modal').style.display = 'flex';
+  document.getElementById('modal-input').focus();
+  document.getElementById('modal-input').onkeydown = e => { if (e.key==='Enter') saveName(); };
 }
 
 async function saveName() {
@@ -177,20 +118,13 @@ async function saveName() {
     await api.renamePerson(personId, name);
     personData.name = name;
     renderHeader();
-    closeModal();
+    document.getElementById('modal').style.display = 'none';
     showToast(`Renamed to "${name}"`);
-    // Reload suggestions visibility
-    if (!name) renderSuggestions([]);
-  } catch(e) {
-    showToast(e.message, 'error');
-  }
+  } catch(e) { showToast(e.message, 'error'); }
   document.getElementById('modal-save').textContent = 'Save';
 }
 
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('modal')) closeModal();
-});
-
+document.getElementById('modal').addEventListener('click', e => { if (e.target===document.getElementById('modal')) document.getElementById('modal').style.display='none'; });
 init();
 </script>
 </body>

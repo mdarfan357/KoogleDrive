@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FaceAlbum — Signing in...</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script>
+    window.SUPABASE_URL      = 'https://your-project.supabase.co';
+    window.SUPABASE_ANON_KEY = 'your-anon-key';
+    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
+  </script>
+</head>
+<body>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:20px;">
+  <div class="spinner"></div>
+  <p id="msg" style="color:var(--text2);font-size:14px;">Signing you in...</p>
+</div>
+
+<script src="../js/auth.js"></script>
+<script>
+(async () => {
+  const sb  = await initSupabase();
+  const msg = document.getElementById('msg');
+
+  // Supabase puts the token in the URL hash after magic link click
+  const { data: { session }, error } = await sb.auth.getSession();
+
+  if (error || !session) {
+    msg.textContent = 'Sign-in failed. Please try again.';
+    setTimeout(() => location.href = '../login.html', 2000);
+    return;
+  }
+
+  // Check allowed_emails
+  const { data: allowed } = await sb
+    .from('allowed_emails')
+    .select('email')
+    .eq('email', session.user.email)
+    .single();
+
+  if (!allowed) {
+    await sb.auth.signOut();
+    location.href = '../login.html?error=not_allowed';
+    return;
+  }
+
+  // Redirect to saved page or events
+  const redirect = sessionStorage.getItem('redirect_after_login') || 'events.html';
+  sessionStorage.removeItem('redirect_after_login');
+  location.href = redirect;
+})();
+</script>
+</body>
+</html>
