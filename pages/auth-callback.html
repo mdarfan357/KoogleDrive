@@ -6,9 +6,7 @@
   <title>FaceAlbum — Signing in...</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.SUPABASE_URL      = 'https://your-project.supabase.co';
-    window.SUPABASE_ANON_KEY = 'your-anon-key';
-    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
+    window.VITE_API_URL = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
@@ -20,35 +18,32 @@
 <script src="../js/auth.js"></script>
 <script>
 (async () => {
-  const sb  = await initSupabase();
   const msg = document.getElementById('msg');
 
-  // Supabase puts the token in the URL hash after magic link click
-  const { data: { session }, error } = await sb.auth.getSession();
+  // Supabase puts token_hash and type in the URL hash after magic link click
+  // e.g. #access_token=...&token_type=bearer
+  // OR as query params: ?token_hash=...&type=magiclink
+  const hash   = new URLSearchParams(location.hash.slice(1));
+  const params = new URLSearchParams(location.search);
 
-  if (error || !session) {
-    msg.textContent = 'Sign-in failed. Please try again.';
-    setTimeout(() => location.href = '../login.html', 2000);
+  const tokenHash = params.get('token_hash') || hash.get('access_token');
+  const type      = params.get('type')       || 'magiclink';
+
+  if (!tokenHash) {
+    msg.textContent = 'Invalid sign-in link. Please try again.';
+    setTimeout(() => location.href = '../login.html?error=expired', 2500);
     return;
   }
 
-  // Check allowed_emails
-  const { data: allowed } = await sb
-    .from('allowed_emails')
-    .select('email')
-    .eq('email', session.user.email)
-    .single();
-
-  if (!allowed) {
-    await sb.auth.signOut();
-    location.href = '../login.html?error=not_allowed';
-    return;
+  try {
+    await verifyMagicLink(tokenHash, type);
+    const redirect = sessionStorage.getItem('redirect_after_login') || 'events.html';
+    sessionStorage.removeItem('redirect_after_login');
+    location.href = redirect;
+  } catch(e) {
+    msg.textContent = e.message || 'Sign-in failed. Please try again.';
+    setTimeout(() => location.href = '../login.html?error=expired', 2500);
   }
-
-  // Redirect to saved page or events
-  const redirect = sessionStorage.getItem('redirect_after_login') || 'events.html';
-  sessionStorage.removeItem('redirect_after_login');
-  location.href = redirect;
 })();
 </script>
 </body>

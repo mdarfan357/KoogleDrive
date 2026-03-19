@@ -1,14 +1,21 @@
-// js/api.js — central API client
-// No API key in frontend — backend is protected by CORS origin check instead.
+// js/api.js
+// All requests include Authorization header from session token.
+// No Supabase or API keys in this file.
 
 const BASE_URL = window.VITE_API_URL || 'http://localhost:8000';
 
 async function request(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
+    ...authHeaders(),   // from auth.js — adds Bearer token
     ...options.headers,
   };
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  if (res.status === 401) {
+    clearSession();
+    location.href = loginUrl();
+    return;
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Request failed');
@@ -34,6 +41,7 @@ const api = {
   }),
   getSuggestions: (personId) => request(`/search/person/${personId}/suggestions`),
 
+  // Recognize is public — no auth header needed
   recognizeFace: async (file) => {
     const form = new FormData();
     form.append('file', file);

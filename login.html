@@ -6,70 +6,44 @@
   <title>FaceAlbum — Sign In</title>
   <link rel="stylesheet" href="css/style.css" />
   <script>
-    window.SUPABASE_URL      = 'https://your-project.supabase.co';
-    window.SUPABASE_ANON_KEY = 'your-anon-key';
-    window.VITE_API_URL      = 'https://your-hf-space.hf.space';
+    window.VITE_API_URL = 'https://your-hf-space.hf.space';
   </script>
   <style>
-    .login-wrap {
-      min-height:      100vh;
-      display:         flex;
-      align-items:     center;
-      justify-content: center;
-      padding:         20px;
-    }
-    .login-card {
-      background:    var(--bg2);
-      border:        1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding:       40px 36px;
-      width:         100%;
-      max-width:     400px;
-      text-align:    center;
-    }
-    .login-logo { font-size: 2.5rem; margin-bottom: 16px; }
-    .login-card h1 { font-size: 22px; margin-bottom: 6px; }
-    .login-sub { color: var(--text2); font-size: 14px; margin-bottom: 28px; }
-    .login-form { display: flex; flex-direction: column; gap: 12px; }
-    .login-note { font-size: 12px; color: var(--text3); margin-top: 8px; }
-    .sent-state { display: none; }
-    .sent-icon  { font-size: 2.5rem; margin-bottom: 14px; }
+    .login-wrap { min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px; }
+    .login-card { background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px 36px;width:100%;max-width:400px;text-align:center; }
+    .login-logo { font-size:2.5rem;margin-bottom:16px; }
+    .login-card h1 { font-size:22px;margin-bottom:6px; }
+    .login-sub  { color:var(--text2);font-size:14px;margin-bottom:28px; }
+    .login-form { display:flex;flex-direction:column;gap:12px; }
+    .login-note { font-size:12px;color:var(--text3);margin-top:8px; }
+    .sent-icon  { font-size:2.5rem;margin-bottom:14px; }
+    .err-box    { padding:10px 14px;background:var(--red-bg);border:1px solid rgba(248,113,113,0.25);border-radius:var(--radius);color:var(--red);font-size:13px;margin-bottom:14px; }
   </style>
 </head>
 <body>
-
 <div class="login-wrap">
   <div class="login-card">
 
-    <!-- Default state -->
     <div id="form-state">
       <div class="login-logo">📸</div>
       <h1>FaceAlbum</h1>
       <p class="login-sub">Family photo collection — members only</p>
-
-      <div id="error-msg" style="display:none;margin-bottom:14px;padding:10px 14px;background:var(--red-bg);border:1px solid rgba(248,113,113,0.25);border-radius:var(--radius);color:var(--red);font-size:13px;"></div>
-
+      <div class="err-box" id="err" style="display:none"></div>
       <div class="login-form">
-        <input
-          class="input"
-          type="email"
-          id="email"
-          placeholder="your@email.com"
-          autocomplete="email"
-        />
+        <input class="input" type="email" id="email" placeholder="your@email.com" autocomplete="email" />
         <button class="btn btn-primary" id="submit-btn" onclick="handleSubmit()" style="width:100%;justify-content:center;">
           Send magic link
         </button>
-        <p class="login-note">We'll send a one-time sign-in link to your email. No password needed.</p>
+        <p class="login-note">We'll email you a one-time sign-in link. No password needed.</p>
       </div>
     </div>
 
-    <!-- Sent state -->
     <div id="sent-state" style="display:none">
       <div class="sent-icon">📬</div>
       <h1>Check your email</h1>
-      <p class="login-sub" id="sent-msg">We sent a sign-in link to your inbox. Click it to continue.</p>
-      <p class="login-note" style="margin-top:20px">Didn't get it? Check your spam folder, or
+      <p class="login-sub" id="sent-msg"></p>
+      <p class="login-note" style="margin-top:20px">
+        Didn't get it? Check spam, or
         <button onclick="resetForm()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0;">try again</button>.
       </p>
     </div>
@@ -79,40 +53,35 @@
 
 <script src="js/auth.js"></script>
 <script>
-// Check for error param (e.g. not on allowed list)
-const params = new URLSearchParams(location.search);
-if (params.get('error') === 'not_allowed') {
-  document.getElementById('error-msg').style.display = 'block';
-  document.getElementById('error-msg').textContent =
-    "Your email isn't on the family list. Contact the admin to get access.";
+// Show error if redirected back with ?error=
+const errParam = new URLSearchParams(location.search).get('error');
+if (errParam === 'not_allowed') showErr("Your email isn't on the family list.");
+if (errParam === 'expired')     showErr("Your link expired. Please request a new one.");
+
+// Already logged in? Redirect
+const existing = getUser();
+if (existing) {
+  const redirect = sessionStorage.getItem('redirect_after_login') || 'pages/events.html';
+  sessionStorage.removeItem('redirect_after_login');
+  location.href = redirect;
 }
 
-// If already logged in, redirect to events
-(async () => {
-  await initSupabase();
-  const user = await getUser();
-  if (user) {
-    const redirect = sessionStorage.getItem('redirect_after_login') || 'pages/events.html';
-    sessionStorage.removeItem('redirect_after_login');
-    location.href = redirect;
-  }
-})();
+document.getElementById('email').addEventListener('keydown', e => { if (e.key === 'Enter') handleSubmit(); });
 
-// Enter key submits
-document.getElementById('email').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleSubmit();
-});
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
 
 async function handleSubmit() {
   const email = document.getElementById('email').value.trim();
   const btn   = document.getElementById('submit-btn');
-  const errEl = document.getElementById('error-msg');
-
+  document.getElementById('err').style.display = 'none';
   if (!email) return;
 
   btn.textContent = 'Sending...';
   btn.disabled    = true;
-  errEl.style.display = 'none';
 
   try {
     await sendMagicLink(email);
@@ -120,11 +89,10 @@ async function handleSubmit() {
     document.getElementById('sent-state').style.display = 'block';
     document.getElementById('sent-msg').textContent =
       `We sent a sign-in link to ${email}. Click it to continue.`;
-  } catch (e) {
-    errEl.textContent    = e.message;
-    errEl.style.display  = 'block';
-    btn.textContent      = 'Send magic link';
-    btn.disabled         = false;
+  } catch(e) {
+    showErr(e.message);
+    btn.textContent = 'Send magic link';
+    btn.disabled    = false;
   }
 }
 
@@ -132,8 +100,9 @@ function resetForm() {
   document.getElementById('form-state').style.display = 'block';
   document.getElementById('sent-state').style.display = 'none';
   document.getElementById('email').value = '';
-  document.getElementById('submit-btn').textContent = 'Send magic link';
-  document.getElementById('submit-btn').disabled    = false;
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = 'Send magic link';
+  btn.disabled    = false;
 }
 </script>
 </body>

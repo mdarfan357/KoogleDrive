@@ -1,134 +1,97 @@
 // js/auth.js
-// Handles Supabase Magic Link auth.
-// Include this script on every protected page BEFORE other scripts.
+// All auth goes through YOUR backend — no Supabase keys in frontend.
 
-// ── Supabase config ─────────────────────────────────────────
-// These are PUBLIC keys — safe to expose in frontend
-// They only allow what Supabase RLS (Row Level Security) permits
-const SUPABASE_URL     = window.SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '';
+const API_BASE = window.VITE_API_URL || 'http://localhost:8000';
 
-// ── Load Supabase JS client from CDN ────────────────────────
-// We use the UMD build so no bundler is needed
-let supabase = null;
+// ── Session storage (localStorage) ──────────────────────────
+function getSession()  { try { return JSON.parse(localStorage.getItem('fa_session')); } catch { return null; } }
+function setSession(s) { localStorage.setItem('fa_session', JSON.stringify(s)); }
+function clearSession(){ localStorage.removeItem('fa_session'); }
 
-async function initSupabase() {
-  if (supabase) return supabase;
-  // Dynamically load Supabase client
-  await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js');
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return supabase;
+function getToken()    { return getSession()?.access_token || null; }
+function getUser()     { return getSession()?.user || null; }
+
+// ── Auth header for API requests ────────────────────────────
+function authHeaders() {
+  const token = getToken();
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
+// ── Send magic link ──────────────────────────────────────────
+async function sendMagicLink(email) {
+  const res = await fetch(`${API_BASE}/auth/send-magic-link`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email }),
   });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to send magic link');
+  return data;
 }
 
-// ── Session management ──────────────────────────────────────
-
-async function getSession() {
-  const sb = await initSupabase();
-  const { data: { session } } = await sb.auth.getSession();
-  return session;
+// ── Verify token from magic link URL ────────────────────────
+async function verifyMagicLink(token, type = 'magiclink') {
+  const res = await fetch(`${API_BASE}/auth/verify`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ token, type }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Verification failed');
+  setSession(data);
+  return data;
 }
 
-async function getUser() {
-  const session = await getSession();
-  return session?.user || null;
-}
-
+// ── Sign out ─────────────────────────────────────────────────
 async function signOut() {
-  const sb = await initSupabase();
-  await sb.auth.signOut();
+  clearSession();
   location.href = loginUrl();
 }
 
 function loginUrl() {
-  // Works whether files are at root or in pages/ subfolder
   const depth = location.pathname.includes('/pages/') ? '../' : '';
   return `${depth}login.html`;
 }
 
-// ── Auth guard ──────────────────────────────────────────────
-// Call this at the top of every protected page.
-// Redirects to login if no valid session.
-// Returns the user object if authenticated.
-
+// ── Auth guard ───────────────────────────────────────────────
+// Call at top of every protected page.
+// Returns user object or redirects to login.
 async function requireAuth() {
-  const sb   = await initSupabase();
-  const user = await getUser();
+  const token = getToken();
+  const user  = getUser();
 
-  if (!user) {
-    // Save current page so we can redirect back after login
+  if (!token || !user) {
     sessionStorage.setItem('redirect_after_login', location.href);
     location.href = loginUrl();
     return null;
   }
 
-  // Check if email is in allowed_emails table
-  const { data, error } = await sb
-    .from('allowed_emails')
-    .select('email, name')
-    .eq('email', user.email)
-    .single();
-
-  if (error || !data) {
-    // Authenticated with Supabase but not on the family list
-    await sb.auth.signOut();
-    location.href = loginUrl() + '?error=not_allowed';
+  // Check if token is expired (JWT exp claim)
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      clearSession();
+      sessionStorage.setItem('redirect_after_login', location.href);
+      location.href = loginUrl();
+      return null;
+    }
+  } catch(e) {
+    clearSession();
+    location.href = loginUrl();
     return null;
   }
 
-  return { ...user, display_name: data.name };
+  return user;
 }
 
-// ── Send magic link ─────────────────────────────────────────
-
-async function sendMagicLink(email) {
-  const sb = await initSupabase();
-
-  // Check allowed_emails BEFORE sending the link
-  const { data, error } = await sb
-    .from('allowed_emails')
-    .select('email')
-    .eq('email', email.toLowerCase().trim())
-    .single();
-
-  if (error || !data) {
-    throw new Error("This email isn't on the guest list. Contact the admin to get access.");
-  }
-
-  const redirectTo = `${location.origin}${location.pathname.replace('login.html', '')}pages/auth-callback.html`;
-
-  const { error: sendError } = await sb.auth.signInWithOtp({
-    email: email.toLowerCase().trim(),
-    options: {
-      emailRedirectTo: redirectTo,
-      shouldCreateUser: true,
-    },
-  });
-
-  if (sendError) throw new Error(sendError.message);
-}
-
-// ── Render user badge in nav ────────────────────────────────
-// Call after requireAuth() to show who is logged in
-
+// ── Render user badge in nav ─────────────────────────────────
 function renderUserBadge(user) {
   const nav = document.querySelector('.nav-links');
   if (!nav || !user) return;
-
   const badge = document.createElement('div');
   badge.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:auto;';
   badge.innerHTML = `
-    <span style="font-size:12px;color:var(--text3);">${user.display_name || user.email}</span>
+    <span style="font-size:12px;color:var(--text3);">${user.name || user.email}</span>
     <button onclick="signOut()" style="padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;">
       Sign out
     </button>`;
