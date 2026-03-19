@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FaceAlbum — Find My Photos</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script>
+    window.VITE_API_URL = 'https://your-hf-space.hf.space';
+    
+  </script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-brand-dot"></div>
+    <span class="nav-brand-name">FaceAlbum</span>
+  </div>
+  <div class="nav-links">
+    <button class="nav-link active" data-page="index" onclick="location.href='index.html'">Find Me</button>
+    <button class="nav-link" data-page="events"  onclick="location.href='pages/events.html'">Events</button>
+    <button class="nav-link" data-page="persons" onclick="location.href='pages/persons.html'">People</button>
+    <button class="nav-link" data-page="merge"   onclick="location.href='pages/merge.html'">Review</button>
+  </div>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1 class="page-title">Find My Photos</h1>
+    <p class="page-subtitle">Take a photo or upload one to find yourself across all events</p>
+  </div>
+
+  <div id="app"></div>
+</main>
+
+<script src="js/api.js"></script>
+<script>
+const app = document.getElementById('app');
+let streamRef = null;
+let facingMode = 'user';
+let state = 'idle'; // idle | camera | loading | result | error
+
+function render() {
+  if (state === 'idle')    renderIdle();
+  if (state === 'camera')  renderCamera();
+  if (state === 'loading') renderLoading();
+  if (state === 'result')  renderResult();
+  if (state === 'error')   renderError();
+}
+
+// ── IDLE ──
+function renderIdle(camError) {
+  app.innerHTML = `
+    <div class="recognize-options">
+      ${camError ? `<div class="cam-error">⚠ ${camError}</div>` : ''}
+      <button class="option-btn primary" id="btn-camera">
+        <span class="option-icon">📷</span>
+        <span class="option-label">Take a photo</span>
+        <span class="option-hint">Use your camera</span>
+      </button>
+      <div class="or-divider">or</div>
+      <button class="option-btn" id="btn-upload">
+        <span class="option-icon">🖼️</span>
+        <span class="option-label">Upload a photo</span>
+        <span class="option-hint">Choose from your device</span>
+      </button>
+      <input type="file" id="file-input" accept="image/*" style="display:none" />
+      <p class="recognize-tip">💡 Works best with a clear front-facing photo — one face only</p>
+    </div>`;
+
+  document.getElementById('btn-camera').onclick = () => startCamera('user');
+  document.getElementById('btn-upload').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('file-input').onchange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+}
+
+// ── CAMERA ──
+function renderCamera() {
+  app.innerHTML = `
+    <div class="camera-wrap">
+      <div class="camera-viewport">
+        <video id="camera-video" autoplay playsinline muted class="camera-video"></video>
+        <div class="camera-overlay"><div class="face-guide"></div></div>
+        <p class="camera-hint">Position your face in the circle</p>
+      </div>
+      <div class="camera-controls">
+        <button class="cam-cancel" id="btn-cancel">✕ Cancel</button>
+        <button class="cam-shutter" id="btn-capture">
+          <div class="cam-shutter-inner"></div>
+        </button>
+        <button class="cam-flip" id="btn-flip" title="Flip camera">🔄</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-cancel').onclick  = reset;
+  document.getElementById('btn-capture').onclick = captureFrame;
+  document.getElementById('btn-flip').onclick    = () => startCamera(facingMode === 'user' ? 'environment' : 'user');
+
+  // Attach stream to video
+  setTimeout(() => {
+    const video = document.getElementById('camera-video');
+    if (video && streamRef) { video.srcObject = streamRef; video.play(); }
+  }, 50);
+}
+
+// ── LOADING ──
+let previewUrl = null;
+function renderLoading() {
+  app.innerHTML = `
+    <div class="recognize-result">
+      ${previewUrl ? `<img src="${previewUrl}" class="preview-img" alt="Captured" />` : ''}
+      <div class="spinner-wrap"><div class="spinner"></div><p>Searching for your face...</p></div>
+    </div>`;
+}
+
+// ── RESULT ──
+let resultData = null;
+function renderResult() {
+  const r = resultData;
+  if (!r.matched) {
+    app.innerHTML = `
+      <div class="recognize-result">
+        ${previewUrl ? `<img src="${previewUrl}" class="preview-img" />` : ''}
+        <div class="result-card">
+          <div class="result-icon">🔍</div>
+          <h2>Not found</h2>
+          <p style="color:var(--text2);margin-bottom:20px">${r.message}</p>
+          <div class="result-actions">
+            <button class="btn btn-primary" onclick="startCamera('user')">Try camera</button>
+            <button class="btn btn-secondary" onclick="reset()">Upload instead</button>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const eventsHtml = (r.events || []).map(ev => `
+    <div class="result-event">
+      <div class="result-event-name">${ev.event_name} · ${ev.photos.length} photos</div>
+      <div class="result-thumbs">
+        ${ev.photos.slice(0, 6).map(p => `
+          <img src="${thumbUrl(p.drive_file_id)}" class="result-thumb"
+               onclick="openLightbox('${imageUrl(p.drive_file_id)}')" />
+        `).join('')}
+        ${ev.photos.length > 6 ? `<div class="result-thumb-more">+${ev.photos.length - 6}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  app.innerHTML = `
+    <div class="recognize-result">
+      ${previewUrl ? `<img src="${previewUrl}" class="preview-img" />` : ''}
+      <div class="result-card">
+        <div class="result-icon">🎉</div>
+        <h2>Found you!</h2>
+        <div class="result-name">${r.person_name}</div>
+        <div class="result-meta">${r.confidence}% confidence · ${r.total_photos} photos across ${(r.events||[]).length} events</div>
+        <button class="btn btn-primary" style="margin-bottom:20px"
+          onclick="location.href='pages/person.html?id=${r.person_id}'">
+          View all my photos →
+        </button>
+        <div class="result-events">${eventsHtml}</div>
+        <button class="btn btn-secondary" onclick="reset()">Search again</button>
+      </div>
+    </div>`;
+}
+
+// ── ERROR ──
+let errorMsg = '';
+function renderError() {
+  app.innerHTML = `
+    <div class="recognize-result">
+      ${previewUrl ? `<img src="${previewUrl}" class="preview-img" />` : ''}
+      <div class="result-card">
+        <div class="result-icon">😕</div>
+        <h2>Couldn't find a match</h2>
+        <p style="color:var(--text2);margin-bottom:20px">${errorMsg}</p>
+        <div class="result-actions">
+          <button class="btn btn-primary" onclick="startCamera('user')">Try camera</button>
+          <button class="btn btn-secondary" onclick="reset()">Upload instead</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── LOGIC ──
+function stopCamera() {
+  if (streamRef) { streamRef.getTracks().forEach(t => t.stop()); streamRef = null; }
+}
+
+async function startCamera(facing) {
+  facingMode = facing;
+  stopCamera();
+  state = 'camera';
+  render();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    streamRef = stream;
+    const video = document.getElementById('camera-video');
+    if (video) { video.srcObject = stream; video.play(); }
+  } catch (e) {
+    stopCamera();
+    state = 'idle';
+    const msg = e.name === 'NotAllowedError' ? 'Camera permission denied.' : e.name === 'NotFoundError' ? 'No camera found.' : e.message;
+    renderIdle(msg);
+  }
+}
+
+function captureFrame() {
+  const video = document.getElementById('camera-video');
+  if (!video) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    previewUrl = URL.createObjectURL(blob);
+    stopCamera();
+    submitFile(new File([blob], 'capture.jpg', { type: 'image/jpeg' }));
+  }, 'image/jpeg', 0.92);
+}
+
+function handleFile(file) {
+  previewUrl = URL.createObjectURL(file);
+  submitFile(file);
+}
+
+async function submitFile(file) {
+  state = 'loading';
+  render();
+  try {
+    resultData = await api.recognizeFace(file);
+    state = 'result';
+  } catch (e) {
+    errorMsg = e.message;
+    state = 'error';
+  }
+  render();
+}
+
+function reset() {
+  stopCamera();
+  previewUrl  = null;
+  resultData  = null;
+  errorMsg    = '';
+  state = 'idle';
+  render();
+}
+
+// Init
+render();
+</script>
+</body>
+</html>
