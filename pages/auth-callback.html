@@ -6,7 +6,7 @@
   <title>FaceAlbum — Signing in...</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script>
-    window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';
+    window.VITE_API_URL = 'https://your-hf-space.hf.space';
   </script>
 </head>
 <body>
@@ -20,29 +20,39 @@
 (async () => {
   const msg = document.getElementById('msg');
 
-  // Supabase puts token_hash and type in the URL hash after magic link click
-  // e.g. #access_token=...&token_type=bearer
-  // OR as query params: ?token_hash=...&type=magiclink
-  const hash   = new URLSearchParams(location.hash.slice(1));
-  const params = new URLSearchParams(location.search);
+  // Parse both hash and query params
+  const hashParams  = new URLSearchParams(location.hash.replace('#', ''));
+  const queryParams = new URLSearchParams(location.search);
 
-  const tokenHash = params.get('token_hash') || hash.get('access_token');
-  const type      = params.get('type')       || 'magiclink';
+  // Supabase can send token in multiple formats — check all of them
+  // Format 1: ?token=xxx&type=magiclink  (what we're seeing)
+  // Format 2: ?token_hash=xxx&type=email
+  // Format 3: #access_token=xxx&token_type=bearer
+  const token = queryParams.get('token')
+             || queryParams.get('token_hash')
+             || hashParams.get('access_token')
+             || hashParams.get('token_hash');
 
-  if (!tokenHash) {
-    msg.textContent = 'Invalid sign-in link. Please try again.';
-    setTimeout(() => location.href = '../login.html?error=expired', 2500);
+  const type  = queryParams.get('type')
+             || hashParams.get('type')
+             || 'magiclink';
+
+  if (!token) {
+    msg.textContent = 'No token found. Please request a new sign-in link.';
+    setTimeout(() => location.href = '../login.html?error=expired', 3000);
     return;
   }
 
   try {
-    await verifyMagicLink(tokenHash, type);
+    msg.textContent = 'Verifying your link...';
+    await verifyMagicLink(token, type);
     const redirect = sessionStorage.getItem('redirect_after_login') || 'events.html';
     sessionStorage.removeItem('redirect_after_login');
+    msg.textContent = 'Success! Redirecting...';
     location.href = redirect;
   } catch(e) {
-    msg.textContent = e.message || 'Sign-in failed. Please try again.';
-    setTimeout(() => location.href = '../login.html?error=expired', 2500);
+    msg.textContent = 'Sign-in failed: ' + e.message;
+    setTimeout(() => location.href = '../login.html?error=expired', 3000);
   }
 })();
 </script>
