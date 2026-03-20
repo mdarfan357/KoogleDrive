@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>FaceAlbum — Review Matches</title>
   <link rel="stylesheet" href="../css/style.css" />
-  <script>
-    window.VITE_API_URL      = 'https://mdarfan-faceapp-backend.hf.space';
-  </script>
+  <script>window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';</script>
 </head>
 <body>
 <nav class="nav">
@@ -19,52 +17,56 @@
   </div>
 </nav>
 <main class="main">
-  <div class="page-header"><h1 class="page-title">Review Matches</h1><p class="page-subtitle" id="subtitle">Loading...</p></div>
+  <div class="page-header"><h1 class="page-title">Review Matches</h1><p class="page-subtitle" id="sub">Loading...</p></div>
   <div id="app"></div>
 </main>
 <script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
-let candidates = [];
+let candidates=[];
 async function init() {
   const user = await requireAuth(); if (!user) return;
   renderUserBadge(user);
   showSpinner(document.getElementById('app'));
   try {
     const data = await api.getMergeCandidates();
-    candidates = data.candidates||[];
-    document.getElementById('subtitle').textContent = `${candidates.length} pairs need your review`;
+    candidates=data.candidates||[];
+    document.getElementById('sub').textContent=`${candidates.length} pairs need your review`;
     render();
-  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed: ${e.message}</p>`; }
+  } catch(e) { document.getElementById('app').innerHTML=`<p style="color:var(--red)">Failed: ${e.message}</p>`; }
 }
 
 function render() {
-  if (!candidates.length) { showEmpty(document.getElementById('app'), '✅', 'All caught up!', 'No pending merge candidates.'); return; }
-  document.getElementById('app').innerHTML = candidates.map(c => `
-    <div class="candidate-card" id="card-${c.id}">
+  if (!candidates.length) { showEmpty(document.getElementById('app'),'✅','All caught up!','No pending merge candidates.'); return; }
+  document.getElementById('app').innerHTML = candidates.map(c=>`
+    <div class="candidate-card" id="c${c.id}">
       <span class="badge badge-accent">${Math.round(c.similarity*100)}% match</span>
       <div class="candidate-persons">
-        <div style="flex:1"><div class="person-sample-name">${c.person_a.name||'<em>Unnamed</em>'}</div>
-          <div class="person-sample-thumbs">${(c.person_a.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div></div>
+        <div style="flex:1">
+          <div class="person-sample-name">${c.person_a.name||'<em>Unnamed</em>'}</div>
+          <div class="person-sample-thumbs">${(c.person_a.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div>
+        </div>
         <div class="candidate-vs">vs</div>
-        <div style="flex:1"><div class="person-sample-name">${c.person_b.name||'<em>Unnamed</em>'}</div>
-          <div class="person-sample-thumbs">${(c.person_b.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div></div>
+        <div style="flex:1">
+          <div class="person-sample-name">${c.person_b.name||'<em>Unnamed</em>'}</div>
+          <div class="person-sample-thumbs">${(c.person_b.sample_thumbnails||[]).slice(0,4).map(u=>`<img src="${u}" class="person-sample-img" onerror="this.style.display='none'" />`).join('')}</div>
+        </div>
       </div>
       <div class="candidate-actions">
-        <button class="btn btn-success" id="merge-${c.id}" onclick="resolve(${c.id},'merge')">✓ Same person — merge</button>
-        <button class="btn btn-danger"  id="reject-${c.id}" onclick="resolve(${c.id},'reject')">✕ Different people</button>
+        <button class="btn btn-success" id="m${c.id}" onclick="resolve(${c.id},'merge')">✓ Same person — merge</button>
+        <button class="btn btn-danger"  id="r${c.id}" onclick="resolve(${c.id},'reject')">✕ Different people</button>
       </div>
     </div>`).join('');
 }
 
 async function resolve(id, action) {
-  ['merge','reject'].forEach(t => { const b = document.getElementById(`${t}-${id}`); if(b){b.disabled=true;b.textContent='...';} });
+  ['m','r'].forEach(p=>{ const b=document.getElementById(`${p}${id}`); if(b){b.disabled=true;b.textContent='...';} });
   try {
-    await api.resolveCandidate(id, action);
-    candidates = candidates.filter(c => c.id !== id);
-    const card = document.getElementById(`card-${id}`);
-    if (card) { card.style.opacity='0'; card.style.transition='opacity 0.3s'; setTimeout(()=>{card.remove();if(!candidates.length)render();},300); }
-    document.getElementById('subtitle').textContent = `${candidates.length} pairs need your review`;
+    await api.resolveCandidate(id,action);
+    candidates=candidates.filter(c=>c.id!==id);
+    const card=document.getElementById(`c${id}`);
+    if(card){card.style.opacity='0';card.style.transition='opacity 0.3s';setTimeout(()=>{card.remove();if(!candidates.length)render();},300);}
+    document.getElementById('sub').textContent=`${candidates.length} pairs need your review`;
     showToast(action==='merge'?'Merged successfully':'Marked as different people');
   } catch(e) { showToast(e.message,'error'); }
 }

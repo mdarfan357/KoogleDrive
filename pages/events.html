@@ -1,13 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>FaceAlbum — Events</title>
   <link rel="stylesheet" href="../css/style.css" />
-  <script>
-    window.VITE_API_URL      = 'https://mdarfan-faceapp-backend.hf.space';
-  </script>
+  <script>window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';</script>
 </head>
 <body>
 <nav class="nav">
@@ -26,25 +23,26 @@
 <script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
+const app = document.getElementById('app');
 async function init() {
   const user = await requireAuth(); if (!user) return;
   renderUserBadge(user);
-  showSpinner(document.getElementById('app'));
+  showSpinner(app);
   try {
     const data = await api.getEvents();
     const events = data.events || [];
-    if (!events.length) { showEmpty(document.getElementById('app'), '📷', 'No events yet', 'Run the pipeline to process your first event.'); return; }
-    document.getElementById('app').innerHTML = `<div class="events-list">${events.map(ev => `
+    if (!events.length) { showEmpty(app,'📷','No events yet','Run the pipeline to process your first event.'); return; }
+    app.innerHTML = `<div class="events-list">${events.map(ev=>`
       <div class="event-row" onclick="location.href='event-detail.html?id=${ev.id}'">
         <div class="event-icon">📷</div>
         <div class="event-info">
           <div class="event-name">${ev.name}</div>
-          <div class="event-meta">${ev.photo_count} photos · ${ev.person_count} people${ev.date?` · ${new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'short'})}`:''}
+          <div class="event-meta">${ev.photo_count||0} photos · ${ev.person_count||0} people${ev.date?` · ${new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'short'})}`:''}
           </div>
         </div>
         <div class="event-arrow">›</div>
       </div>`).join('')}</div>`;
-  } catch(e) { document.getElementById('app').innerHTML = `<p style="color:var(--red)">Failed to load events: ${e.message}</p>`; }
+  } catch(e) { app.innerHTML=`<p style="color:var(--red)">Failed: ${e.message}</p>`; }
 }
 init();
 </script>

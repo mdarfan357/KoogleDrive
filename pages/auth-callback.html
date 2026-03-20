@@ -1,58 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>FaceAlbum — Signing in...</title>
   <link rel="stylesheet" href="../css/style.css" />
-  <script>
-    window.VITE_API_URL = 'https://your-hf-space.hf.space';
-  </script>
+  <script>window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';</script>
 </head>
 <body>
 <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:20px;">
   <div class="spinner"></div>
   <p id="msg" style="color:var(--text2);font-size:14px;">Signing you in...</p>
 </div>
-
 <script src="../js/auth.js"></script>
 <script>
 (async () => {
-  const msg = document.getElementById('msg');
-
-  // Parse both hash and query params
-  const hashParams  = new URLSearchParams(location.hash.replace('#', ''));
-  const queryParams = new URLSearchParams(location.search);
-
-  // Supabase can send token in multiple formats — check all of them
-  // Format 1: ?token=xxx&type=magiclink  (what we're seeing)
-  // Format 2: ?token_hash=xxx&type=email
-  // Format 3: #access_token=xxx&token_type=bearer
-  const token = queryParams.get('token')
-             || queryParams.get('token_hash')
-             || hashParams.get('access_token')
-             || hashParams.get('token_hash');
-
-  const type  = queryParams.get('type')
-             || hashParams.get('type')
-             || 'magiclink';
+  const msg  = document.getElementById('msg');
+  const hash = new URLSearchParams(location.hash.replace('#',''));
+  const token = hash.get('token');
 
   if (!token) {
-    msg.textContent = 'No token found. Please request a new sign-in link.';
-    setTimeout(() => location.href = '../login.html?error=expired', 3000);
+    msg.textContent = 'Sign-in failed. Please try again.';
+    setTimeout(() => location.href = '../login.html?error=token_failed', 2000);
     return;
   }
 
   try {
-    msg.textContent = 'Verifying your link...';
-    await verifyMagicLink(token, type);
-    const redirect = sessionStorage.getItem('redirect_after_login') || 'events.html';
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    setSession({ access_token: token, user: { email: payload.email, name: payload.name } });
+    msg.textContent = `Welcome, ${payload.name}! Redirecting...`;
+    const r = sessionStorage.getItem('redirect_after_login') || 'events.html';
     sessionStorage.removeItem('redirect_after_login');
-    msg.textContent = 'Success! Redirecting...';
-    location.href = redirect;
+    setTimeout(() => location.href = r, 800);
   } catch(e) {
-    msg.textContent = 'Sign-in failed: ' + e.message;
-    setTimeout(() => location.href = '../login.html?error=expired', 3000);
+    msg.textContent = 'Sign-in failed. Please try again.';
+    setTimeout(() => location.href = '../login.html?error=token_failed', 2000);
   }
 })();
 </script>
