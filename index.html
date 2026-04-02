@@ -4,7 +4,7 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>FaceAlbum — Find My Photos</title>
   <link rel="stylesheet" href="css/style.css" />
-  <script>window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';</script>
+  <script>window.VITE_API_URL = 'https://your-hf-space.hf.space';</script>
 </head>
 <body>
 <nav class="nav">
@@ -136,7 +136,14 @@ function renderResult() {
     <div class="result-card">
       <div class="result-icon">🎉</div>
       <h2>Found you!</h2>
-      ${r.person_name?`<div class="result-name">${r.person_name}</div>`:''}
+      ${r.is_named
+          ? `<div class="result-name">\${r.person_name}</div>`
+          : `<div style="text-align:center;margin-bottom:12px">
+               <div style="font-size:15px;color:var(--text2);margin-bottom:8px">You haven't been named yet</div>
+               <div style="font-family:monospace;font-size:13px;color:var(--accent);background:var(--bg3);padding:6px 12px;border-radius:6px;display:inline-block">\${r.person_id}</div>
+               <div style="font-size:12px;color:var(--text3);margin-top:8px">Sign in → People → find yourself → click ✏️ to add your name</div>
+             </div>`
+        }
       <div class="count-banner">
         <div class="count-box"><div class="count-num">${r.total_photos}</div><div class="count-label">Your photos</div></div>
         <div class="count-box"><div class="count-num">${(r.events||[]).length}</div><div class="count-label">Events</div></div>
