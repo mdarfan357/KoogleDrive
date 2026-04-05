@@ -1,48 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
   <title>FaceAlbum — Events</title>
-  <link rel="stylesheet" href="../css/style.css" />
-  <script>window.VITE_API_URL = 'https://mdarfan-faceapp-backend.hf.space';</script>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <script>window.VITE_API_URL='https://your-hf-space.hf.space';</script>
 </head>
 <body>
 <nav class="nav">
-  <div class="nav-brand"><div class="nav-brand-dot"></div><span class="nav-brand-name">FaceAlbum</span></div>
-  <div class="nav-links">
-    <button class="nav-link" onclick="location.href='../index.html'">Find Me</button>
-    <button class="nav-link active">Events</button>
-    <button class="nav-link" onclick="location.href='persons.html'">People</button>
-    <button class="nav-link" onclick="location.href='merge.html'">Review</button>
-  </div>
+  <div class="nav-brand"><div class="nav-logo">📸</div><span class="nav-brand-name">FaceAlbum</span></div>
+  <div class="nav-links" id="nav-links"></div>
 </nav>
+<div class="bottom-nav" id="bottom-nav"></div>
 <main class="main">
-  <div class="page-header"><h1 class="page-title">Events</h1><p class="page-subtitle">Browse photos by occasion</p></div>
+  <div class="page-header">
+    <div class="page-eyebrow">Browse</div>
+    <h1 class="page-title">Events</h1>
+    <p class="page-sub" id="sub">Loading...</p>
+  </div>
   <div id="app"></div>
 </main>
+<script src="../js/icons.js"></script>
 <script src="../js/auth.js"></script>
 <script src="../js/api.js"></script>
 <script>
-const app = document.getElementById('app');
 async function init() {
   const user = await requireAuth(); if (!user) return;
-  renderUserBadge(user);
-  showSpinner(app);
+  buildNav('events', user);
+  showSpinner(document.getElementById('app'));
   try {
     const data = await api.getEvents();
     const events = data.events || [];
-    if (!events.length) { showEmpty(app,'📷','No events yet','Run the pipeline to process your first event.'); return; }
-    app.innerHTML = `<div class="events-list">${events.map(ev=>`
-      <div class="event-row" onclick="location.href='event-detail.html?id=${ev.id}'">
-        <div class="event-icon">📷</div>
-        <div class="event-info">
-          <div class="event-name">${ev.name}</div>
-          <div class="event-meta">${ev.photo_count||0} photos · ${ev.person_count||0} people${ev.date?` · ${new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'short'})}`:''}
-          </div>
-        </div>
-        <div class="event-arrow">›</div>
-      </div>`).join('')}</div>`;
-  } catch(e) { app.innerHTML=`<p style="color:var(--red)">Failed: ${e.message}</p>`; }
+    document.getElementById('sub').textContent = events.length + ' events';
+    if (!events.length) { showEmpty(document.getElementById('app'), Icons.events, 'No events yet', 'Run the pipeline to process your first event.'); return; }
+    document.getElementById('app').innerHTML = '<div class="events-grid">' + events.map(ev => {
+      const coverHtml = ev.cover_image_id
+        ? '<img src="' + thumbUrl(ev.cover_image_id) + '" alt="" onerror="this.style.display=\'none\'" />'
+        : '<div class="event-cover-placeholder">' + Icons.photo + '</div>';
+      const date = ev.date ? new Date(ev.date).toLocaleDateString('en-US',{year:'numeric',month:'short'}) : '';
+      return '<div class="event-card" onclick="location.href=\'event-detail.html?id=' + ev.id + '\'">'
+        + '<div class="event-cover" id="cover-' + ev.id + '">'
+        + coverHtml
+        + '<div class="event-cover-overlay"></div>'
+        + (ev.date ? '<div class="event-cover-badge">' + date + '</div>' : '')
+        + '<label class="event-upload-cover" title="Set cover photo" onclick="event.stopPropagation()">'
+        + Icons.img + ' Cover'
+        + '<input type="file" accept="image/*" style="display:none" onchange="setCover(\'' + ev.id + '\',this)">'
+        + '</label>'
+        + '</div>'
+        + '<div class="event-info">'
+        + '<div class="event-name">' + ev.name + '</div>'
+        + '<div class="event-meta"><span>' + (ev.photo_count||0) + ' photos</span><div class="event-meta-dot"></div><span>' + (ev.person_count||0) + ' people</span></div>'
+        + '</div></div>';
+    }).join('') + '</div>';
+  } catch(e) { document.getElementById('app').innerHTML = '<p style="color:var(--rose)">Failed: ' + e.message + '</p>'; }
+}
+
+async function setCover(eventId, input) {
+  const file = input.files?.[0]; if (!file) return;
+  showToast('Uploading cover photo...', 'success');
+  try {
+    const form = new FormData(); form.append('file', file); form.append('event_id', eventId);
+    const res = await fetch(window.VITE_API_URL + '/events/' + eventId + '/upload-cover', {
+      method: 'POST', headers: authHeaders(), body: form
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    const cover = document.querySelector('#cover-' + eventId + ' img');
+    if (cover) cover.src = thumbUrl(data.cover_image_id);
+    else location.reload();
+    showToast('Cover photo updated!');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
 }
 init();
 </script>
